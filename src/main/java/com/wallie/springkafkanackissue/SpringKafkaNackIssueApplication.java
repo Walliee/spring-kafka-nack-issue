@@ -41,23 +41,13 @@ public class SpringKafkaNackIssueApplication {
 		acknowledgeMessage(message);
 	}
 
-	@ServiceActivator(inputChannel = "test_topic.myGroup.errors")
-	public void error(ErrorMessage message) {
-		System.out.println("error handler: " + new String((byte[]) message.getOriginalMessage().getPayload()));
-		if ("second".equals(new String((byte[]) message.getOriginalMessage().getPayload()))) {
-			throw new RuntimeException("failed to handle failed message");
-		} else {
-			acknowledgeMessage(message);
-		}
-	}
-
 	@ServiceActivator(inputChannel = "errorChannel")
 	public void defaultErrorHandler(ErrorMessage message) {
 		System.out.println("default error handler: " + new String((byte[]) message.getOriginalMessage().getPayload()));
 
 	}
 
-	private void acknowledgeMessage(Message<?> message) {
+	public static void acknowledgeMessage(Message<?> message) {
 		Acknowledgment acknowledgment = message.getHeaders()
 				.get(KafkaHeaders.ACKNOWLEDGMENT, Acknowledgment.class);
 		if (acknowledgment != null) {
