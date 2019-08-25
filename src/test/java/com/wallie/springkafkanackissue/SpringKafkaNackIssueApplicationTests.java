@@ -2,43 +2,41 @@ package com.wallie.springkafkanackissue;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
-import org.awaitility.Awaitility;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mockito;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.KafkaHeaders;
-import org.springframework.kafka.test.EmbeddedKafkaBroker;
 import org.springframework.kafka.test.context.EmbeddedKafka;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.support.MessageBuilder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit4.SpringRunner;
 
-import static org.awaitility.Awaitility.*;
+import static org.awaitility.Awaitility.await;
 import static org.junit.Assert.assertEquals;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.verify;
 
 @RunWith(SpringRunner.class)
 @SpringBootTest
 @EmbeddedKafka(topics = "test_topic", partitions = 1)
 @TestPropertySource(properties = {
 		"spring.kafka.bootstrap-servers=${spring.embedded.kafka.brokers}",
-		"spring.kafka.consumer.auto-offset-reset=earliest",
-		"spring.kafka.consumer.enable-auto-commit=false"
+		"spring.cloud.stream.kafka.binder.brokers=${spring.embedded.kafka.brokers}",
+		"spring.cloud.stream.bindings.input.destination=test_topic",
+		"spring.cloud.stream.bindings.input.group=myGroup",
+		"spring.cloud.stream.bindings.input.consumer.max-attempts=1",
+		"logging.level.root=OFF"
 })
 public class SpringKafkaNackIssueApplicationTests {
 	@Autowired
@@ -52,20 +50,26 @@ public class SpringKafkaNackIssueApplicationTests {
 	@Test
 	public void contextLoads() {
 
-		// Send first message which will fail
-		Message<String> message1 = MessageBuilder.withPayload("first")
+		// First message which will fail in message handle but succeed in error handler
+		Message<byte[]> message1 = MessageBuilder.withPayload("first".getBytes())
 				.setHeader(KafkaHeaders.TOPIC, "test_topic")
 				.build();
 		this.kafkaTemplate.send(message1);
 
-		// Send second message which will succeed
-		Message<String> message2 = MessageBuilder.withPayload("second")
+		// Second message which will fail in both message and error handler
+		Message<byte[]> message2 = MessageBuilder.withPayload("second".getBytes())
 				.setHeader(KafkaHeaders.TOPIC, "test_topic")
 				.build();
 		this.kafkaTemplate.send(message2);
 
+		// Third message which succeed
+		Message<byte[]> message3 = MessageBuilder.withPayload("third".getBytes())
+				.setHeader(KafkaHeaders.TOPIC, "test_topic")
+				.build();
+		this.kafkaTemplate.send(message3);
+
 		await().untilAsserted(() -> {
-			verify(this.consumer).accept("second");
+			verify(this.consumer).accept("third");
 			Map<String, Object> adminConfigs = new HashMap<>();
 			adminConfigs.put(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, this.brokers);
 			try (AdminClient adminClient = AdminClient.create(adminConfigs)) {
@@ -78,7 +82,7 @@ public class SpringKafkaNackIssueApplicationTests {
 
 				// offset is committed due to Acknowledgement#acknoledge() being called
 				// when the second message was successfully processed.
-				assertEquals(2, offsetAndMetadata.offset());
+				assertEquals(3, offsetAndMetadata.offset());
 			}
 		});
 	}

@@ -8,16 +8,17 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.context.annotation.Bean;
-import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
-import org.springframework.kafka.core.ConsumerFactory;
-import org.springframework.kafka.listener.ContainerProperties;
+import org.springframework.cloud.stream.annotation.EnableBinding;
+import org.springframework.cloud.stream.annotation.StreamListener;
+import org.springframework.cloud.stream.messaging.Sink;
+import org.springframework.integration.annotation.ServiceActivator;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.support.ErrorMessage;
 
 @SpringBootApplication
+@EnableBinding(Sink.class)
 public class SpringKafkaNackIssueApplication {
 	private static final Logger log = LoggerFactory
 			.getLogger(SpringKafkaNackIssueApplication.class);
@@ -28,9 +29,11 @@ public class SpringKafkaNackIssueApplication {
 		SpringApplication.run(SpringKafkaNackIssueApplication.class, args);
 	}
 
-	@KafkaListener(topics = "test_topic", groupId = "myGroup")
+	@StreamListener(Sink.INPUT)
 	public void consumeMessage(Message<String> message) {
-		if (message.getPayload().equals("first")) {
+		System.out.println("message handler: " + message.getPayload());
+		if (message.getPayload().equals("first")
+				|| message.getPayload().equals("second")) {
 			throw new RuntimeException("something went wrong");
 		}
 
@@ -42,15 +45,11 @@ public class SpringKafkaNackIssueApplication {
 		}
 	}
 
-	@Bean
-	public ConcurrentKafkaListenerContainerFactory<String, String> kafkaListenerContainerFactory(
-			ConsumerFactory<String, String> consumerFactory) {
-		ConcurrentKafkaListenerContainerFactory<String, String> factory = new ConcurrentKafkaListenerContainerFactory<>();
-		factory.setConsumerFactory(consumerFactory);
-		factory.getContainerProperties().setAckOnError(false);
-		factory.getContainerProperties().setAckOnError(false);
-		factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
-		return factory;
+	@ServiceActivator(inputChannel = "errorChannel")
+	public void error(ErrorMessage message) {
+		System.out.println("error handler: " + new String((byte[]) message.getOriginalMessage().getPayload()));
+		if (message.getOriginalMessage().getPayload().equals("second")) {
+			throw new RuntimeException("failed to handle failed message");
+		}
 	}
-
 }
