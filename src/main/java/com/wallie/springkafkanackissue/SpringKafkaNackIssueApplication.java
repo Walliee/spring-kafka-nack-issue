@@ -11,10 +11,13 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cloud.stream.annotation.EnableBinding;
 import org.springframework.cloud.stream.annotation.StreamListener;
 import org.springframework.cloud.stream.messaging.Sink;
+import org.springframework.context.annotation.Bean;
 import org.springframework.integration.annotation.ServiceActivator;
+import org.springframework.integration.channel.PublishSubscribeChannel;
 import org.springframework.kafka.support.Acknowledgment;
 import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.Message;
+import org.springframework.messaging.SubscribableChannel;
 import org.springframework.messaging.support.ErrorMessage;
 
 @SpringBootApplication
@@ -39,6 +42,13 @@ public class SpringKafkaNackIssueApplication {
 
 		this.consumer.accept(message.getPayload());
 		acknowledgeMessage(message);
+	}
+
+	// If this is not provided channel type is DirectChannel
+	// and default error handler bridge can subscribe to it.
+	@Bean(name = "test_topic.myGroup.errors")
+	public SubscribableChannel customErrorChannel() {
+		return new PublishSubscribeChannel();
 	}
 
 	@ServiceActivator(inputChannel = "test_topic.myGroup.errors")
